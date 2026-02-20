@@ -10,7 +10,8 @@ import tempfile
 import unittest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
-SOURCE_SCRIPTS_DIR = REPO_ROOT / "scripts"
+SOURCE_SRC_DIR = REPO_ROOT / "src"
+INSTALLER_SOURCE = REPO_ROOT / "install_palisades_parking_cron.sh"
 
 
 def make_executable(path: pathlib.Path) -> None:
@@ -28,20 +29,17 @@ class InstallerScriptTests(unittest.TestCase):
         self.tempdir = tempfile.TemporaryDirectory()
         self.root = pathlib.Path(self.tempdir.name)
         self.project_dir = self.root / "project"
-        self.scripts_dir = self.project_dir / "scripts"
+        self.src_dir = self.project_dir / "src"
         self.fake_bin_dir = self.root / "fake-bin"
         self.store_file = self.root / "crontab_store.txt"
 
-        self.scripts_dir.mkdir(parents=True)
+        self.src_dir.mkdir(parents=True)
         self.fake_bin_dir.mkdir(parents=True)
 
-        for filename in [
-            "install_palisades_parking_cron.sh",
-            "palisades_parking_watch.py",
-        ]:
-            shutil.copy2(SOURCE_SCRIPTS_DIR / filename, self.scripts_dir / filename)
+        shutil.copy2(INSTALLER_SOURCE, self.project_dir / "install_palisades_parking_cron.sh")
+        shutil.copy2(SOURCE_SRC_DIR / "palisades_parking_watch.py", self.src_dir / "palisades_parking_watch.py")
 
-        self.installer = self.scripts_dir / "install_palisades_parking_cron.sh"
+        self.installer = self.project_dir / "install_palisades_parking_cron.sh"
         make_executable(self.installer)
 
         fake_crontab = self.fake_bin_dir / "crontab"
