@@ -40,7 +40,7 @@ PLAYWRIGHT_BROWSERS_PATH=0 .venv/bin/playwright install chromium
 .venv/bin/python3 src/main.py --target-date 2026-02-21 --location ALPINE
 ```
 
-## Install Cron (Every Minute)
+## Turn Cron On (Install Cron)
 
 ```bash
 # every 1 minute (default)
@@ -62,17 +62,15 @@ crontab -l
 tail -n 20 logs/palisades_parking_watch.log
 ```
 
-## Uninstall Cron
+## Turn Cron Off
 
-Remove the line containing `# palisades-parking-watch` from `crontab -l`.
-
-## Portability
-
-The source scripts resolve paths from their own file location, so the project can be moved anywhere on your machine.
-If you move the repo, reinstall cron from the new path:
+Remove the line containing `# palisades-parking-watch` from `crontab -l` (no-op if it is not installed).
 
 ```bash
-bash install.sh --target-date YYYY-MM-DD --location ALPINE
+tmpfile="$(mktemp)"
+crontab -l | grep -v "# palisades-parking-watch" > "$tmpfile" || true
+crontab "$tmpfile"
+rm -f "$tmpfile"
 ```
 
 ## Run Tests
