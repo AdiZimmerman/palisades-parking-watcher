@@ -37,17 +37,17 @@ PLAYWRIGHT_BROWSERS_PATH=0 .venv/bin/playwright install chromium
 ## Run Once
 
 ```bash
-.venv/bin/python3 src/main.py --target-date 2026-02-21 --location ALPINE
+.venv/bin/python3 src/main.py --target-date <YYYY-MM-DD> --location <ALPINE|PALISADES>
 ```
 
 ## Turn Cron On (Install Cron)
 
 ```bash
 # every 1 minute (default)
-bash install.sh --target-date 2026-02-21 --location ALPINE
+bash install.sh --target-date <YYYY-MM-DD> --location <ALPINE|PALISADES>
 
-# every 5 minutes
-bash install.sh --target-date 2026-02-21 --location PALISADES --interval-minutes 5
+# every N minutes (1-59)
+bash install.sh --target-date <YYYY-MM-DD> --location <ALPINE|PALISADES> --interval-minutes <N>
 ```
 
 This installs a single cron line tagged with `# palisades-parking-watch`.
