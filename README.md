@@ -14,10 +14,10 @@ Monitors Palisades parking availability for a target date and location (`ALPINE`
 
 ## Repository Layout
 
-- `src/palisades_parking_watch.py`: watcher script
-- `install_palisades_parking_cron.sh`: cron installer
-- `tests/test_cron_scripts.py`: cron installer tests
-- `tests/test_palisades_parking_watch.py`: unit tests
+- `src/main.py`: watcher script
+- `install.sh`: cron installer
+- `tests/test_install.py`: cron installer tests
+- `tests/test_main.py`: unit tests
 - `logs/`: runtime outputs (ignored except `.gitkeep`)
 
 ## Requirements
@@ -37,17 +37,17 @@ PLAYWRIGHT_BROWSERS_PATH=0 .venv/bin/playwright install chromium
 ## Run Once
 
 ```bash
-.venv/bin/python3 src/palisades_parking_watch.py --target-date 2026-02-21 --location ALPINE
+.venv/bin/python3 src/main.py --target-date 2026-02-21 --location ALPINE
 ```
 
 ## Install Cron (Every Minute)
 
 ```bash
 # every 1 minute (default)
-bash install_palisades_parking_cron.sh --target-date 2026-02-21 --location ALPINE
+bash install.sh --target-date 2026-02-21 --location ALPINE
 
 # every 5 minutes
-bash install_palisades_parking_cron.sh --target-date 2026-02-21 --location PALISADES --interval-minutes 5
+bash install.sh --target-date 2026-02-21 --location PALISADES --interval-minutes 5
 ```
 
 This installs a single cron line tagged with `# palisades-parking-watch`.
@@ -72,7 +72,7 @@ The source scripts resolve paths from their own file location, so the project ca
 If you move the repo, reinstall cron from the new path:
 
 ```bash
-bash install_palisades_parking_cron.sh --target-date YYYY-MM-DD --location ALPINE
+bash install.sh --target-date YYYY-MM-DD --location ALPINE
 ```
 
 ## Run Tests

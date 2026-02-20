@@ -5,7 +5,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
-import palisades_parking_watch as watcher
+import main as watcher
 
 
 class CalendarStyleTests(unittest.TestCase):

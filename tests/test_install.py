@@ -11,7 +11,7 @@ import unittest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 SOURCE_SRC_DIR = REPO_ROOT / "src"
-INSTALLER_SOURCE = REPO_ROOT / "install_palisades_parking_cron.sh"
+INSTALLER_SOURCE = REPO_ROOT / "install.sh"
 
 
 def make_executable(path: pathlib.Path) -> None:
@@ -36,10 +36,10 @@ class InstallerScriptTests(unittest.TestCase):
         self.src_dir.mkdir(parents=True)
         self.fake_bin_dir.mkdir(parents=True)
 
-        shutil.copy2(INSTALLER_SOURCE, self.project_dir / "install_palisades_parking_cron.sh")
-        shutil.copy2(SOURCE_SRC_DIR / "palisades_parking_watch.py", self.src_dir / "palisades_parking_watch.py")
+        shutil.copy2(INSTALLER_SOURCE, self.project_dir / "install.sh")
+        shutil.copy2(SOURCE_SRC_DIR / "main.py", self.src_dir / "main.py")
 
-        self.installer = self.project_dir / "install_palisades_parking_cron.sh"
+        self.installer = self.project_dir / "install.sh"
         make_executable(self.installer)
 
         fake_crontab = self.fake_bin_dir / "crontab"
@@ -112,7 +112,7 @@ exit 2
         self.assertNotIn("# alpine-parking-watch", updated)
         self.assertEqual(updated.count("# palisades-parking-watch"), 1)
         self.assertIn("*/5 * * * *", updated)
-        self.assertIn("palisades_parking_watch.py", updated)
+        self.assertIn("main.py", updated)
         self.assertIn("--location 'PALISADES'", updated)
 
     def test_rejects_interval_minutes_above_59(self) -> None:

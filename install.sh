@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-WATCH_SCRIPT="$ROOT/src/palisades_parking_watch.py"
+WATCH_SCRIPT="$ROOT/src/main.py"
 CRON_LOG="$ROOT/logs/palisades_parking_watch.cron.log"
 MARKER="# palisades-parking-watch"
 TARGET_DATE=""
