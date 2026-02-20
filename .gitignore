@@ -1,0 +1,10 @@
+.DS_Store
+.venv/
+.playwright-profile/
+.playwright-profile-stealth/
+__pycache__/
+*.pyc
+
+logs/*
+!logs/.gitkeep
+
