@@ -16,6 +16,7 @@ Monitors Palisades parking availability for a target date and location (`ALPINE`
 
 - `scripts/palisades_parking_watch.py`: watcher script
 - `scripts/install_palisades_parking_cron.sh`: cron installer
+- `scripts/test_cron_scripts.py`: cron installer tests
 - `scripts/test_palisades_parking_watch.py`: unit tests
 - `logs/`: runtime outputs (ignored except `.gitkeep`)
 
@@ -47,16 +48,12 @@ bash scripts/install_palisades_parking_cron.sh --target-date 2026-02-21 --locati
 
 # every 5 minutes
 bash scripts/install_palisades_parking_cron.sh --target-date 2026-02-21 --location PALISADES --interval-minutes 5
-
-# every 30 seconds
-bash scripts/install_palisades_parking_cron.sh --target-date 2026-02-21 --location ALPINE --interval-seconds 30
 ```
 
 This installs a single cron line tagged with `# palisades-parking-watch`.
 
 Cadence notes:
-- `--interval-minutes N` runs every N minutes.
-- `--interval-seconds N` supports sub-minute cadence by running a minute dispatcher that invokes the watcher multiple times within that minute.
+- `--interval-minutes N` runs every N minutes (`N` from 1 to 59).
 
 ## Verify Cron
 

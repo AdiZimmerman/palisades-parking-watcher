@@ -6,7 +6,6 @@ import pathlib
 import shutil
 import stat
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -38,7 +37,6 @@ class InstallerScriptTests(unittest.TestCase):
 
         for filename in [
             "install_palisades_parking_cron.sh",
-            "cron_dispatcher.sh",
             "palisades_parking_watch.py",
         ]:
             shutil.copy2(SOURCE_SCRIPTS_DIR / filename, self.scripts_dir / filename)
@@ -83,17 +81,15 @@ exit 2
             check=False,
         )
 
-    def test_rejects_conflicting_interval_args(self) -> None:
+    def test_rejects_interval_seconds_option(self) -> None:
         result = self.run_installer(
             "--target-date",
             "2026-02-28",
-            "--interval-minutes",
-            "5",
             "--interval-seconds",
             "30",
         )
         self.assertEqual(result.returncode, 2)
-        self.assertIn("either --interval-minutes or --interval-seconds", result.stdout)
+        self.assertIn("Unknown argument: --interval-seconds", result.stdout)
 
     def test_replaces_existing_marker_lines(self) -> None:
         self.store_file.write_text(
@@ -117,97 +113,19 @@ exit 2
         self.assertIn("keep this line", updated)
         self.assertNotIn("# alpine-parking-watch", updated)
         self.assertEqual(updated.count("# palisades-parking-watch"), 1)
-        self.assertIn("--interval-seconds '300'", updated)
+        self.assertIn("*/5 * * * *", updated)
+        self.assertIn("palisades_parking_watch.py", updated)
         self.assertIn("--location 'PALISADES'", updated)
 
-
-class CronDispatcherTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.tempdir = tempfile.TemporaryDirectory()
-        self.root = pathlib.Path(self.tempdir.name)
-        self.fake_bin_dir = self.root / "fake-bin"
-        self.fake_bin_dir.mkdir(parents=True)
-
-        self.dispatcher = self.root / "cron_dispatcher.sh"
-        shutil.copy2(SOURCE_SCRIPTS_DIR / "cron_dispatcher.sh", self.dispatcher)
-        make_executable(self.dispatcher)
-
-        self.counter_file = self.root / "watch_counter.txt"
-        self.watcher_script = self.root / "watcher.py"
-        self.watcher_script.write_text(
-            """#!/usr/bin/env python3
-from __future__ import annotations
-import os
-import pathlib
-
-counter = pathlib.Path(os.environ["COUNTER_FILE"])
-count = int(counter.read_text(encoding="utf-8")) if counter.exists() else 0
-counter.write_text(str(count + 1), encoding="utf-8")
-""",
-            encoding="utf-8",
+    def test_rejects_interval_minutes_above_59(self) -> None:
+        result = self.run_installer(
+            "--target-date",
+            "2026-02-28",
+            "--interval-minutes",
+            "60",
         )
-        make_executable(self.watcher_script)
-
-        write_file(
-            self.fake_bin_dir / "date",
-            """#!/usr/bin/env bash
-set -euo pipefail
-if [[ "${1:-}" == "+%s" ]]; then
-  printf "%s\\n" "${FAKE_EPOCH:-0}"
-  exit 0
-fi
-exec /bin/date "$@"
-""",
-        )
-
-        write_file(
-            self.fake_bin_dir / "sleep",
-            """#!/usr/bin/env bash
-set -euo pipefail
-exit 0
-""",
-        )
-
-    def tearDown(self) -> None:
-        self.tempdir.cleanup()
-
-    def run_dispatcher(self, interval_seconds: str, fake_epoch: str) -> subprocess.CompletedProcess[str]:
-        env = os.environ.copy()
-        env["PATH"] = f"{self.fake_bin_dir}:{env.get('PATH', '')}"
-        env["COUNTER_FILE"] = str(self.counter_file)
-        env["FAKE_EPOCH"] = fake_epoch
-        return subprocess.run(
-            [
-                "bash",
-                str(self.dispatcher),
-                "--interval-seconds",
-                interval_seconds,
-                "--python-bin",
-                sys.executable,
-                "--watch-script",
-                str(self.watcher_script),
-                "--target-date",
-                "2026-02-28",
-                "--location",
-                "ALPINE",
-            ],
-            text=True,
-            capture_output=True,
-            env=env,
-            check=False,
-        )
-
-    def test_skips_when_cadence_not_aligned(self) -> None:
-        result = self.run_dispatcher(interval_seconds="120", fake_epoch="61")
-        self.assertEqual(result.returncode, 0, msg=result.stderr)
-        self.assertIn("SKIP cadence interval_seconds=120 epoch=61", result.stdout)
-        self.assertFalse(self.counter_file.exists())
-
-    def test_runs_once_when_cadence_aligned(self) -> None:
-        result = self.run_dispatcher(interval_seconds="120", fake_epoch="240")
-        self.assertEqual(result.returncode, 0, msg=result.stderr)
-        self.assertTrue(self.counter_file.exists())
-        self.assertEqual(self.counter_file.read_text(encoding="utf-8"), "1")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--interval-minutes must be between 1 and 59", result.stdout)
 
 
 if __name__ == "__main__":
