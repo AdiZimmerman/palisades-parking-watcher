@@ -10,6 +10,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import time
 
 os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
 
@@ -25,6 +26,8 @@ STEALTH_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 )
+MAX_FETCH_ATTEMPTS = 3
+RETRYABLE_BACKOFF_SECONDS = 2
 
 
 def parse_args() -> argparse.Namespace:
@@ -77,7 +80,7 @@ def classify_day_style(style: str | None, aria_disabled: str | None) -> tuple[bo
     return (False, "Target day has no availability style")
 
 
-def fetch_calendar_status(target_date: dt.date, location: str) -> tuple[bool, str, str]:
+def fetch_calendar_status_once(target_date: dt.date, location: str) -> tuple[bool, str, str]:
     try:
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
         from playwright.sync_api import sync_playwright
@@ -168,6 +171,24 @@ def fetch_calendar_status(target_date: dt.date, location: str) -> tuple[bool, st
                 context.close()
     except PlaywrightTimeoutError as exc:
         raise RuntimeError(f"Playwright timeout: {exc}") from exc
+
+
+def fetch_calendar_status(target_date: dt.date, location: str) -> tuple[bool, str, str]:
+    last_error: RuntimeError | None = None
+    for attempt in range(1, MAX_FETCH_ATTEMPTS + 1):
+        try:
+            return fetch_calendar_status_once(target_date, location)
+        except RuntimeError as exc:
+            if "playwright is not installed" in str(exc).lower():
+                raise
+            last_error = exc
+            if attempt < MAX_FETCH_ATTEMPTS:
+                time.sleep(RETRYABLE_BACKOFF_SECONDS * attempt)
+    if last_error is None:
+        raise RuntimeError("Calendar fetch failed for an unknown reason")
+    raise RuntimeError(
+        f"{last_error} (after {MAX_FETCH_ATTEMPTS} attempts)"
+    ) from last_error
 
 
 def save_debug_snapshot(page_text: str) -> None:
