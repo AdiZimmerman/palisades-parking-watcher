@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import os
+import pathlib
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import unittest
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+SOURCE_SCRIPTS_DIR = REPO_ROOT / "scripts"
+
+
+def make_executable(path: pathlib.Path) -> None:
+    mode = path.stat().st_mode
+    path.chmod(mode | stat.S_IXUSR)
+
+
+def write_file(path: pathlib.Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8")
+    make_executable(path)
+
+
+class InstallerScriptTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tempdir.name)
+        self.project_dir = self.root / "project"
+        self.scripts_dir = self.project_dir / "scripts"
+        self.fake_bin_dir = self.root / "fake-bin"
+        self.store_file = self.root / "crontab_store.txt"
+
+        self.scripts_dir.mkdir(parents=True)
+        self.fake_bin_dir.mkdir(parents=True)
+
+        for filename in [
+            "install_palisades_parking_cron.sh",
+            "cron_dispatcher.sh",
+            "palisades_parking_watch.py",
+        ]:
+            shutil.copy2(SOURCE_SCRIPTS_DIR / filename, self.scripts_dir / filename)
+
+        self.installer = self.scripts_dir / "install_palisades_parking_cron.sh"
+        make_executable(self.installer)
+
+        fake_crontab = self.fake_bin_dir / "crontab"
+        write_file(
+            fake_crontab,
+            """#!/usr/bin/env bash
+set -euo pipefail
+store="${FAKE_CRONTAB_STORE:?missing FAKE_CRONTAB_STORE}"
+if [[ "${1:-}" == "-l" ]]; then
+  if [[ -f "$store" ]]; then
+    cat "$store"
+    exit 0
+  fi
+  exit 1
+fi
+if [[ $# -eq 1 ]]; then
+  cp "$1" "$store"
+  exit 0
+fi
+exit 2
+""",
+        )
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+
+    def run_installer(self, *args: str) -> subprocess.CompletedProcess[str]:
+        env = os.environ.copy()
+        env["PATH"] = f"{self.fake_bin_dir}:{env.get('PATH', '')}"
+        env["FAKE_CRONTAB_STORE"] = str(self.store_file)
+        return subprocess.run(
+            ["bash", str(self.installer), *args],
+            text=True,
+            capture_output=True,
+            env=env,
+            cwd=self.project_dir,
+            check=False,
+        )
+
+    def test_rejects_conflicting_interval_args(self) -> None:
+        result = self.run_installer(
+            "--target-date",
+            "2026-02-28",
+            "--interval-minutes",
+            "5",
+            "--interval-seconds",
+            "30",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("either --interval-minutes or --interval-seconds", result.stdout)
+
+    def test_replaces_existing_marker_lines(self) -> None:
+        self.store_file.write_text(
+            "keep this line\n"
+            "remove old # palisades-parking-watch\n"
+            "remove legacy # alpine-parking-watch\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_installer(
+            "--target-date",
+            "2026-02-28",
+            "--location",
+            "PALISADES",
+            "--interval-minutes",
+            "5",
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+        updated = self.store_file.read_text(encoding="utf-8")
+        self.assertIn("keep this line", updated)
+        self.assertNotIn("# alpine-parking-watch", updated)
+        self.assertEqual(updated.count("# palisades-parking-watch"), 1)
+        self.assertIn("--interval-seconds '300'", updated)
+        self.assertIn("--location 'PALISADES'", updated)
+
+
+class CronDispatcherTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tempdir.name)
+        self.fake_bin_dir = self.root / "fake-bin"
+        self.fake_bin_dir.mkdir(parents=True)
+
+        self.dispatcher = self.root / "cron_dispatcher.sh"
+        shutil.copy2(SOURCE_SCRIPTS_DIR / "cron_dispatcher.sh", self.dispatcher)
+        make_executable(self.dispatcher)
+
+        self.counter_file = self.root / "watch_counter.txt"
+        self.watcher_script = self.root / "watcher.py"
+        self.watcher_script.write_text(
+            """#!/usr/bin/env python3
+from __future__ import annotations
+import os
+import pathlib
+
+counter = pathlib.Path(os.environ["COUNTER_FILE"])
+count = int(counter.read_text(encoding="utf-8")) if counter.exists() else 0
+counter.write_text(str(count + 1), encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
+        make_executable(self.watcher_script)
+
+        write_file(
+            self.fake_bin_dir / "date",
+            """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "+%s" ]]; then
+  printf "%s\\n" "${FAKE_EPOCH:-0}"
+  exit 0
+fi
+exec /bin/date "$@"
+""",
+        )
+
+        write_file(
+            self.fake_bin_dir / "sleep",
+            """#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+""",
+        )
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+
+    def run_dispatcher(self, interval_seconds: str, fake_epoch: str) -> subprocess.CompletedProcess[str]:
+        env = os.environ.copy()
+        env["PATH"] = f"{self.fake_bin_dir}:{env.get('PATH', '')}"
+        env["COUNTER_FILE"] = str(self.counter_file)
+        env["FAKE_EPOCH"] = fake_epoch
+        return subprocess.run(
+            [
+                "bash",
+                str(self.dispatcher),
+                "--interval-seconds",
+                interval_seconds,
+                "--python-bin",
+                sys.executable,
+                "--watch-script",
+                str(self.watcher_script),
+                "--target-date",
+                "2026-02-28",
+                "--location",
+                "ALPINE",
+            ],
+            text=True,
+            capture_output=True,
+            env=env,
+            check=False,
+        )
+
+    def test_skips_when_cadence_not_aligned(self) -> None:
+        result = self.run_dispatcher(interval_seconds="120", fake_epoch="61")
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("SKIP cadence interval_seconds=120 epoch=61", result.stdout)
+        self.assertFalse(self.counter_file.exists())
+
+    def test_runs_once_when_cadence_aligned(self) -> None:
+        result = self.run_dispatcher(interval_seconds="120", fake_epoch="240")
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertTrue(self.counter_file.exists())
+        self.assertEqual(self.counter_file.read_text(encoding="utf-8"), "1")
+
+
+if __name__ == "__main__":
+    unittest.main()
