@@ -23,7 +23,7 @@ class CalendarStyleTests(unittest.TestCase):
             "false",
         )
         self.assertFalse(is_available)
-        self.assertIn("sold out", reason.lower())
+        self.assertIn("no availability", reason.lower())
 
     def test_disabled_means_not_available(self) -> None:
         is_available, reason = watcher.classify_day_style(None, "true")
@@ -39,6 +39,14 @@ class HelperTests(unittest.TestCase):
     def test_month_name_to_number(self) -> None:
         self.assertEqual(watcher.month_name_to_number("February"), 2)
         self.assertEqual(watcher.month_name_to_number("Mar"), 3)
+
+    def test_format_result_line_available(self) -> None:
+        line = watcher.format_result_line(True, "Calendar day color is green (available)")
+        self.assertEqual(line, "Available!")
+
+    def test_format_result_line_not_available(self) -> None:
+        line = watcher.format_result_line(False, "No availability for target day")
+        self.assertEqual(line, "Not Available!")
 
 
 class RetryBehaviorTests(unittest.TestCase):

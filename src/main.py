@@ -72,7 +72,7 @@ def classify_day_style(style: str | None, aria_disabled: str | None) -> tuple[bo
     if "49, 200, 25" in style_text:
         return (True, "Calendar day color is green (available)")
     if "247, 205, 212" in style_text:
-        return (False, "Calendar day color is pink (sold out)")
+        return (False, "No availability for target day")
     if is_disabled:
         return (False, "Target day is disabled in calendar")
     if style_text:
@@ -166,7 +166,11 @@ def fetch_calendar_status_once(target_date: dt.date, location: str) -> tuple[boo
                     "-----\n"
                     f"{page.inner_text('body')[:50000]}\n"
                 )
-                return (is_available, f"{reason} ({location}, {target_day_label})", snapshot)
+                params = (
+                    f"--target-date {target_date.isoformat()} "
+                    f"--location {location}"
+                )
+                return (is_available, f"{reason} ({params})", snapshot)
             finally:
                 context.close()
     except PlaywrightTimeoutError as exc:
@@ -242,24 +246,39 @@ def notify(message: str) -> None:
     subprocess.run(["osascript", "-e", script], check=False)
 
 
+def format_result_line(is_available: bool, reason: str) -> str:
+    if is_available:
+        return "Available!"
+    return "Not Available!"
+
+
+def format_run_params(target_date: dt.date, location: str) -> str:
+    return f"--target-date {target_date.isoformat()} --location {location}"
+
+
 def main() -> int:
     args = parse_args()
     try:
         target_date = parse_target_date(args.target_date)
     except ValueError:
-        append_log(
-            f"[{now_iso()}] ERROR invalid --target-date (expected YYYY-MM-DD): {args.target_date}"
+        error_message = (
+            f"invalid --target-date (expected YYYY-MM-DD): {args.target_date}"
         )
+        append_log(
+            f"[{now_iso()}] [ERROR] {error_message}"
+        )
+        print(f"[ERROR] {error_message}", file=sys.stderr)
         return 2
 
     location = args.location
+    run_params = format_run_params(target_date, location)
     label = f"{location}, {target_label(target_date)}"
     lock_handle = acquire_lock()
     if lock_handle is None:
         append_log(
-            f"[{now_iso()}] SKIP overlapping run"
+            f"[{now_iso()}] [SKIP] overlapping run ({run_params})"
         )
-        print(f"Success: skipped overlapping run for {target_date.isoformat()}")
+        print("[SKIP] Skipped! (overlapping run)")
         return 0
 
     timestamp = now_iso()
@@ -269,15 +288,19 @@ def main() -> int:
         if not is_available:
             save_debug_snapshot(snapshot)
     except RuntimeError as exc:
+        error_message = f"detection: {exc}"
         append_log(
-            f"[{timestamp}] ERROR detection: {exc}"
+            f"[{timestamp}] [ERROR] {error_message} ({run_params})"
         )
+        print(f"[ERROR] {error_message}", file=sys.stderr)
         lock_handle.close()
         return 1
     except Exception as exc:  # noqa: BLE001
+        error_message = f"unexpected: {exc}"
         append_log(
-            f"[{timestamp}] ERROR unexpected: {exc}"
+            f"[{timestamp}] [ERROR] {error_message} ({run_params})"
         )
+        print(f"[ERROR] {error_message}", file=sys.stderr)
         lock_handle.close()
         return 1
 
@@ -289,8 +312,9 @@ def main() -> int:
         previous_status = "unknown"
 
     current_status = "available" if is_available else "not_available"
+    result_line = format_result_line(is_available, reason)
     append_log(
-        f"[{timestamp}] {current_status} - {reason}"
+        f"[{timestamp}] [RESULT] {result_line} ({run_params})"
     )
 
     if is_available and previous_status != "available":
@@ -302,7 +326,7 @@ def main() -> int:
     state["target_date"] = target_date.isoformat()
     state["location"] = location
     save_state(state)
-    print(f"Success: {current_status} for {target_date.isoformat()} - {reason}")
+    print(f"[RESULT] {result_line}")
     lock_handle.close()
     return 0
 
